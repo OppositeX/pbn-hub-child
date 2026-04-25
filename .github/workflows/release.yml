@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build plugin zip
+        run: |
+          mkdir -p build/pbn-hub-child
+          rsync -av \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'tools' \
+            --exclude 'tests' \
+            --exclude '.gitignore' \
+            --exclude 'README.md' \
+            --exclude 'build' \
+            ./ build/pbn-hub-child/
+          cd build && zip -r pbn-hub-child.zip pbn-hub-child
+
+      - name: Create release & upload zip
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/pbn-hub-child.zip
+          draft: false
+          prerelease: false
