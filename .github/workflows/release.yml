@@ -28,9 +28,13 @@ jobs:
             ./ build/pbn-hub-child/
           cd build && zip -r pbn-hub-child.zip pbn-hub-child
 
-      - name: Create release & upload zip
+      - name: Publish release to PUBLIC pbn-hub-child-releases proxy
         uses: softprops/action-gh-release@v2
         with:
+          repository: OppositeX/pbn-hub-child-releases
+          token: ${{ secrets.RELEASES_PAT }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           files: build/pbn-hub-child.zip
           draft: false
           prerelease: false
