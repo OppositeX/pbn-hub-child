@@ -11,7 +11,7 @@ class PBN_Hub_Child_Rest {
         add_action( 'rest_api_init', [ $this, 'register' ] );
     }
 
-    public function register(): void {
+    public function register() {
         $auth = [ 'PBN_Hub_Child_Auth', 'require_token' ];
 
         register_rest_route( PBN_HUB_CHILD_REST_NS, '/health', [
