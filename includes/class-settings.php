@@ -15,6 +15,9 @@ class PBN_Hub_Child_Settings {
     public function __construct() {
         add_action( 'admin_menu', [ $this, 'menu' ] );
         add_action( 'admin_init', [ $this, 'register_settings' ] );
+        // v1.0.9: one-click enrollment from the Hub. Runs before any output so
+        // we can wp_safe_redirect cleanly.
+        add_action( 'admin_init', [ $this, 'maybe_handle_enroll' ] );
         add_action( 'admin_post_pbn_hub_child_save', [ $this, 'save' ] );
         add_action( 'admin_notices', [ $this, 'maybe_admin_notice' ] );
     }
@@ -267,4 +270,84 @@ class PBN_Hub_Child_Settings {
             || ( strpos( $msg, 'self signed certificate' ) !== false )
             || ( strpos( $msg, 'self-signed certificate' ) !== false );
     }
+
+    /**
+     * v1.0.9: Handle one-click enrollment from the Hub.
+     *
+     * URL shape (all on the settings page so cap/admin checks naturally apply):
+     *   options-general.php?page=pbn-hub-child
+     *     &pbn_enroll=1
+     *     &hub=<urlencoded hub base url>
+     *     &tok=<per-site bearer token>
+     *     &t=<unix ts>
+     *     &sig=<hex hmac-sha256>
+     *
+     *   sig = hmac_sha256( hub + "\n" + tok + "\n" + t, ENROLL_SECRET )
+     *
+     * On success: persist hub_url + token, run the existing handshake, redirect
+     * to the settings page with a success message. On failure: 403.
+     *
+     * SECURITY: the shared secret is NEVER stored in an option. It only lives
+     * in the PBN_HUB_CHILD_ENROLL_SECRET define (filterable for tests).
+     */
+    public function maybe_handle_enroll() {
+        if ( empty( $_GET['pbn_enroll'] ) ) return;
+        if ( ! is_admin() ) return;
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( 'Forbidden', 'PBN Hub enrollment', [ 'response' => 403 ] );
+        }
+
+        $hub = isset( $_GET['hub'] ) ? esc_url_raw( wp_unslash( $_GET['hub'] ) ) : '';
+        $tok = isset( $_GET['tok'] ) ? sanitize_text_field( wp_unslash( $_GET['tok'] ) ) : '';
+        $t   = isset( $_GET['t'] )   ? (int) $_GET['t'] : 0;
+        $sig = isset( $_GET['sig'] ) ? sanitize_text_field( wp_unslash( $_GET['sig'] ) ) : '';
+
+        $hub = rtrim( $hub, '/' );
+
+        if ( ! $hub || ! $tok || ! $t || ! $sig ) {
+            wp_die( 'Bad enrollment URL (missing params)', 'PBN Hub enrollment', [ 'response' => 403 ] );
+        }
+
+        // 24h replay window.
+        if ( abs( time() - $t ) > 86400 ) {
+            wp_die( 'Enrollment URL expired', 'PBN Hub enrollment', [ 'response' => 403 ] );
+        }
+
+        $secret = (string) apply_filters( 'pbn_hub_child_enroll_secret', PBN_HUB_CHILD_ENROLL_SECRET );
+        $payload = $hub . "\n" . $tok . "\n" . $t;
+        $expected = hash_hmac( 'sha256', $payload, $secret );
+
+        if ( ! hash_equals( $expected, strtolower( $sig ) ) ) {
+            wp_die( 'Bad enrollment signature', 'PBN Hub enrollment', [ 'response' => 403 ] );
+        }
+
+        // Single-use guard: a given sig can only enroll once. Short TTL covers
+        // the replay window above. We set AFTER signature verification so a
+        // bad sig can't burn a future-valid one.
+        $tk = 'pbn_enroll_used_' . md5( $sig );
+        if ( get_transient( $tk ) ) {
+            wp_die( 'Enrollment URL already used', 'PBN Hub enrollment', [ 'response' => 403 ] );
+        }
+        set_transient( $tk, 1, 86400 );
+
+        // Persist exactly the same options the Save form writes — no schema change.
+        update_option( 'pbn_hub_child_hub_url', $hub );
+        update_option( 'pbn_hub_child_token',   $tok );
+
+        $skip_ssl = (bool) get_option( 'pbn_hub_child_skip_ssl', false );
+        $msg = $this->try_handshake( $hub, $tok, $skip_ssl );
+
+        if ( strpos( $msg, 'OK' ) === 0 ) {
+            update_option( 'pbn_hub_child_last_handshake', current_time( 'mysql' ) );
+            update_option( 'pbn_hub_child_last_error', '' );
+            $msg = 'Enrolled · ' . $msg;
+        } else {
+            update_option( 'pbn_hub_child_last_error', $msg );
+            $msg = 'Enrollment saved but handshake failed: ' . $msg;
+        }
+
+        wp_safe_redirect( add_query_arg( 'pbn_msg', urlencode( $msg ), admin_url( 'options-general.php?page=pbn-hub-child' ) ) );
+        exit;
+    }
+
 }
