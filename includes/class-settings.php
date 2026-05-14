@@ -26,7 +26,7 @@ class PBN_Hub_Child_Settings {
         add_options_page(
             'PBN Hub Child',
             'PBN Hub Child',
-            'manage_options',
+            'install_plugins',
             'pbn-hub-child',
             [ $this, 'render' ]
         );
@@ -293,7 +293,10 @@ class PBN_Hub_Child_Settings {
     public function maybe_handle_enroll() {
         if ( empty( $_GET['pbn_enroll'] ) ) return;
         if ( ! is_admin() ) return;
-        if ( ! current_user_can( 'manage_options' ) ) {
+        // v1.0.10: accept install_plugins OR manage_options — some PBN sites use
+        // custom Role Manager configs where the WP admin user that installs plugins
+        // doesn't have the full manage_options cap.
+        if ( ! current_user_can( 'install_plugins' ) && ! current_user_can( 'manage_options' ) ) {
             wp_die( 'Forbidden', 'PBN Hub enrollment', [ 'response' => 403 ] );
         }
 
