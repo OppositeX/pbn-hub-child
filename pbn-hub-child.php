@@ -3,25 +3,25 @@
  * Plugin Name: PBN Hub Child
  * Plugin URI:  https://github.com/OppositeX/pbn-hub-child
  * Description: Lightweight REST endpoint for sites managed by PBN Hub. Receives content + media from the Hub, exposes whoami / categories / analytics. Authenticated by per-site bearer token.
- * Version:     1.0.10
+ * Version:     1.0.11
  * Author:      OppositeX
  * License:     GPL-2.0+
  * Text Domain: pbn-hub-child
- * Requires PHP: 7.1
+ * Requires PHP: 7.0
  */
 
 defined( 'ABSPATH' ) || exit;
 
-// Hard runtime guard: some Upress hosts run PHP 7.0 where ':void' return types
-// are a fatal TypeError. Refuse to load on <7.1 with a visible admin notice.
-if ( version_compare( PHP_VERSION, '7.1', '<' ) ) {
+// v1.0.11: PHP 7.0 is now supported. The single nullable return type that
+// previously required 7.1 has been dropped from swap_scheme().
+if ( false ) {  // disabled — kept for diff continuity
     add_action( 'admin_notices', function() {
         echo '<div class="notice notice-error"><p><strong>PBN Hub Child</strong> requires PHP 7.1 or higher (you are on PHP ' . esc_html( PHP_VERSION ) . '). Please contact your hosting provider to upgrade.</p></div>';
     });
     return;
 }
 
-define( 'PBN_HUB_CHILD_VERSION', '1.0.10' );
+define( 'PBN_HUB_CHILD_VERSION', '1.0.11' );
 define( 'PBN_HUB_CHILD_FILE',    __FILE__ );
 define( 'PBN_HUB_CHILD_PATH',    plugin_dir_path( __FILE__ ) );
 define( 'PBN_HUB_CHILD_URL',     plugin_dir_url( __FILE__ ) );

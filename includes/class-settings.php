@@ -195,6 +195,11 @@ class PBN_Hub_Child_Settings {
         if ( $primary['ok'] ) return $primary['msg'];
 
         $err = $primary['err'];
+        // v1.0.11: also fall back when the primary scheme returns an HTTP error
+        // status (e.g. 405 from a server-side proxy that redirects HTTPS->HTTP
+        // and rejects POST on the wrong leg). We can't know up-front whether
+        // hub.d3v.co.il is reachable on HTTPS, so any non-transport HTTP error
+        // is also a candidate for the alt-scheme retry.
         $is_transport = is_string( $err ) && $err !== ''
             && ( self::is_cert_expired_error( $err )
                 || stripos( $err, 'curl error' ) !== false
@@ -204,9 +209,10 @@ class PBN_Hub_Child_Settings {
                 || stripos( $err, 'operation timed out' ) !== false
                 || stripos( $err, 'ssl' ) !== false
                 || stripos( $err, 'tls' ) !== false );
+        $is_http_status = is_string( $err ) && preg_match( '/^HTTP \d+$/', $err );
 
         $alt_url = $this->swap_scheme( $hub_url );
-        if ( $is_transport && $alt_url !== null && $alt_url !== $hub_url ) {
+        if ( ( $is_transport || $is_http_status ) && $alt_url !== null && $alt_url !== $hub_url ) {
             $retry = $this->do_handshake_request( $alt_url, $token, $skip_ssl );
             if ( $retry['ok'] ) {
                 // Persist the working scheme so future handshakes / Hub calls go straight to it.
@@ -254,7 +260,7 @@ class PBN_Hub_Child_Settings {
     }
 
     /** Swap https<->http on a URL. Returns null if no scheme. */
-    private function swap_scheme( string $url ): ?string {
+    private function swap_scheme( string $url ) {
         if ( stripos( $url, 'https://' ) === 0 ) return 'http://' . substr( $url, 8 );
         if ( stripos( $url, 'http://' )  === 0 ) return 'https://' . substr( $url, 7 );
         return null;
