@@ -3,7 +3,7 @@
  * Plugin Name: PBN Hub Child
  * Plugin URI:  https://github.com/OppositeX/pbn-hub-child
  * Description: Lightweight REST endpoint for sites managed by PBN Hub. Receives content + media from the Hub, exposes whoami / categories / analytics. Authenticated by per-site bearer token.
- * Version:     1.0.14
+ * Version:     1.0.15
  * Author:      OppositeX
  * License:     GPL-2.0+
  * Text Domain: pbn-hub-child
@@ -12,6 +12,12 @@
 
 defined( 'ABSPATH' ) || exit;
 
+
+// v1.0.15: Dispatcher-compat alias namespace `pbn/v1`. The HUB master
+// dispatcher posts new articles to /wp-json/pbn/v1/posts (a Phase-2 SaaS
+// surface). class-rest.php now registers /posts AND /factory-publish under
+// both `pbn-hub-child/v1` (legacy) and `pbn/v1` (dispatcher-canonical) so
+// 108 child sites all expose the same route the dispatcher expects.
 // v1.0.11: PHP 7.0 is now supported. The single nullable return type that
 // previously required 7.1 has been dropped from swap_scheme().
 if ( false ) {  // disabled — kept for diff continuity
@@ -21,7 +27,7 @@ if ( false ) {  // disabled — kept for diff continuity
     return;
 }
 
-define( 'PBN_HUB_CHILD_VERSION', '1.0.14' );
+define( 'PBN_HUB_CHILD_VERSION', '1.0.15' );
 define( 'PBN_HUB_CHILD_FILE',    __FILE__ );
 define( 'PBN_HUB_CHILD_PATH',    plugin_dir_path( __FILE__ ) );
 define( 'PBN_HUB_CHILD_URL',     plugin_dir_url( __FILE__ ) );

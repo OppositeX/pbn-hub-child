@@ -50,6 +50,68 @@ class PBN_Hub_Child_Rest {
             'callback' => [ $this, 'analytics' ],
             'permission_callback' => $auth,
         ] );
+
+        // ── v1.0.15 dispatcher-compat aliases ────────────────────────────────
+        // The Phase-2 master dispatcher (lives on hub.d3v.co.il) posts to
+        // /wp-json/pbn/v1/posts and /wp-json/pbn/v1/factory-publish on each
+        // child. Mirror our existing routes under the canonical `pbn/v1`
+        // namespace so the dispatcher and the legacy Hub_API path both work.
+        register_rest_route( 'pbn/v1', '/posts', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'rest_posts_create' ],
+            'permission_callback' => $auth,
+        ] );
+        register_rest_route( 'pbn/v1', '/posts/(?P<id>\\d+)/status', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'update_post_status' ],
+            'permission_callback' => $auth,
+            'args' => [ 'id' => [ 'required' => true, 'type' => 'integer' ] ],
+        ] );
+        register_rest_route( 'pbn/v1', '/factory-publish', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'factory_publish' ],
+            'permission_callback' => $auth,
+        ] );
+        register_rest_route( 'pbn/v1', '/health', [
+            'methods'             => 'GET',
+            'callback'            => [ $this, 'health' ],
+            'permission_callback' => [ 'PBN_Hub_Child_Auth', 'public_ok' ],
+        ] );
+        register_rest_route( 'pbn/v1', '/whoami', [
+            'methods'             => 'GET',
+            'callback'            => [ $this, 'whoami' ],
+            'permission_callback' => $auth,
+        ] );
+    }
+
+    /**
+     * POST /pbn/v1/posts — flexible alias that accepts EITHER the lightweight
+     * shape ({ title, content, status, post_date, categories|category_ids }) or
+     * the rich factory_publish shape ({ ..., images[], featured_image, factory }).
+     *
+     * v1.0.15 — added so the master dispatcher can POST a freshly AI-generated
+     * article without hitting WP core's /wp/v2/posts (which requires user auth).
+     */
+    public function rest_posts_create( WP_REST_Request $req ) {
+        // Normalize category param: dispatcher may send `categories`.
+        $cats = $req->get_param( 'category_ids' );
+        if ( ! $cats ) {
+            $alt = $req->get_param( 'categories' );
+            if ( $alt ) {
+                $req->set_param( 'category_ids', is_array( $alt ) ? $alt : array_map( 'trim', explode( ',', (string) $alt ) ) );
+            }
+        }
+        // Default status: dispatcher publishes immediately, but allow override.
+        if ( ! $req->get_param( 'status' ) ) {
+            $req->set_param( 'status', 'publish' );
+        }
+        $r = $this->factory_publish( $req );
+        if ( is_wp_error( $r ) ) return $r;
+        // Dispatcher cares about publish_url. Mirror it alongside view_url.
+        if ( is_array( $r ) && ! empty( $r['view_url'] ) ) {
+            $r['publish_url'] = $r['view_url'];
+        }
+        return $r;
     }
 
     public function health() {
