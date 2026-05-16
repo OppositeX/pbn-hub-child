@@ -248,12 +248,18 @@ class PBN_Hub_Child_Settings {
         $fallback = $base . 'index.php?rest_route=/pbn-hub/v1/handshake';
         $sslverify = $skip_ssl ? false : (bool) apply_filters( 'pbn_hub_child_sslverify', true );
 
-        $request = function( string $url ) use ( $sslverify, $token, $wp_version ) {
+        // v1.0.20: spoof a real-browser User-Agent. Cloudflare's Bot Fight Mode in front of
+        // Hub-hosted on hub.d3v.co.il was returning 405 on POST + 403 on GET for the default
+        // 'WordPress/X.X; https://<site>' UA. With a real-browser UA the request lands at the
+        // origin WP REST handler properly.
+        $browser_ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36';
+        $request = function( string $url ) use ( $sslverify, $token, $wp_version, $browser_ua ) {
             return wp_remote_post( $url, [
                 'timeout'     => 15,
                 'sslverify'   => $sslverify,
                 'redirection' => 0,
-                'headers'     => [ 'Content-Type' => 'application/json', 'Accept' => 'application/json' ],
+                'user-agent'  => $browser_ua,
+                'headers'     => [ 'Content-Type' => 'application/json', 'Accept' => 'application/json', 'User-Agent' => $browser_ua ],
                 'body'        => wp_json_encode( [
                     'token'                 => $token,
                     'domain'                => preg_replace( '#^https?://(www\.)?#', '', untrailingslashit( home_url() ) ),
@@ -324,7 +330,8 @@ class PBN_Hub_Child_Settings {
                     'timeout'     => 15,
                     'sslverify'   => $sslverify,
                     'redirection' => 5, // GET is safe to follow redirects
-                    'headers'     => array( 'Accept' => 'application/json' ),
+                    'user-agent'  => $browser_ua,
+                    'headers'     => array( 'Accept' => 'application/json', 'User-Agent' => $browser_ua ),
                 ) );
                 $capture_attempt( $r3, 'GET', $get_url );
                 if ( ! is_wp_error( $r3 ) ) {
