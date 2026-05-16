@@ -238,22 +238,49 @@ class PBN_Hub_Child_Settings {
     /** Single handshake attempt. Returns [ok, msg, err]. */
     private function do_handshake_request( string $hub_url, string $token, bool $skip_ssl ): array {
         global $wp_version;
-        $url = trailingslashit( $hub_url ) . 'wp-json/pbn-hub/v1/handshake';
+        // v1.0.17: try the pretty /wp-json/ URL first. If it 405s (nginx /wp-json/ rules on
+        // some hosts reject POST on the HTTPS leg of an HTTP→HTTPS upgrade), fall back to
+        // the always-available /index.php?rest_route= URL that WordPress exposes regardless
+        // of permalink config or nginx location blocks. redirection=>0 makes the 301 surface
+        // here as a real 301 status instead of getting silently followed into the failing leg.
+        $base = trailingslashit( $hub_url );
+        $primary  = $base . 'wp-json/pbn-hub/v1/handshake';
+        $fallback = $base . 'index.php?rest_route=/pbn-hub/v1/handshake';
         $sslverify = $skip_ssl ? false : (bool) apply_filters( 'pbn_hub_child_sslverify', true );
-        $r = wp_remote_post( $url, [
-            'timeout'   => 15,
-            'sslverify' => $sslverify,
-            'headers'   => [ 'Content-Type' => 'application/json', 'Accept' => 'application/json' ],
-            'body'      => wp_json_encode( [
-                'token'                 => $token,
-                'domain'                => preg_replace( '#^https?://(www\.)?#', '', untrailingslashit( home_url() ) ),
-                'wp_version'            => $wp_version,
-                'php_version'           => PHP_VERSION,
-                'pbn_hub_child_version' => PBN_HUB_CHILD_VERSION,
-            ] ),
-        ] );
-        // v1.0.16: persist the raw response (body + headers + final url) on every attempt so
-        // the settings page can surface why a handshake is failing. Includes redirect target.
+
+        $request = function( string $url ) use ( $sslverify, $token, $wp_version ) {
+            return wp_remote_post( $url, [
+                'timeout'     => 15,
+                'sslverify'   => $sslverify,
+                'redirection' => 0,
+                'headers'     => [ 'Content-Type' => 'application/json', 'Accept' => 'application/json' ],
+                'body'        => wp_json_encode( [
+                    'token'                 => $token,
+                    'domain'                => preg_replace( '#^https?://(www\.)?#', '', untrailingslashit( home_url() ) ),
+                    'wp_version'            => $wp_version,
+                    'php_version'           => PHP_VERSION,
+                    'pbn_hub_child_version' => PBN_HUB_CHILD_VERSION,
+                ] ),
+            ] );
+        };
+
+        $r   = $request( $primary );
+        $url = $primary;
+        // Detect redirect or 405 → switch to rest_route= fallback.
+        if ( ! is_wp_error( $r ) ) {
+            $code = wp_remote_retrieve_response_code( $r );
+            if ( in_array( (int) $code, [ 301, 302, 303, 307, 308, 405 ], true ) ) {
+                $r2 = $request( $fallback );
+                if ( ! is_wp_error( $r2 ) ) {
+                    $code2 = wp_remote_retrieve_response_code( $r2 );
+                    if ( $code2 >= 200 && $code2 < 500 ) {
+                        $r   = $r2;
+                        $url = $fallback;
+                    }
+                }
+            }
+        }
+
         if ( is_wp_error( $r ) ) {
             update_option( 'pbn_hub_child_last_raw', wp_json_encode( [
                 'url'    => $url,
