@@ -147,6 +147,15 @@ class PBN_Hub_Child_Settings {
                     <th>Last handshake</th>
                     <td><?php echo $last_handshake ? esc_html( $last_handshake ) : '—'; ?></td>
                 </tr>
+                <tr>
+                    <th>Last raw response</th>
+                    <td><?php
+                        $raw = get_option( 'pbn_hub_child_last_raw', '' );
+                        if ( $raw ) {
+                            echo '<pre style="background:#0f172a;color:#e2e8f0;padding:10px;border-radius:6px;font-size:11px;max-width:780px;overflow:auto">' . esc_html( $raw ) . '</pre>';
+                        } else { echo '—'; }
+                    ?></td>
+                </tr>
                 <?php if ( $last_error ) : ?>
                 <tr>
                     <th>Last error</th>
@@ -243,7 +252,19 @@ class PBN_Hub_Child_Settings {
                 'pbn_hub_child_version' => PBN_HUB_CHILD_VERSION,
             ] ),
         ] );
+        // v1.0.16: persist the raw response (body + headers + final url) on every attempt so
+        // the settings page can surface why a handshake is failing. Includes redirect target.
         if ( is_wp_error( $r ) ) {
+            update_option( 'pbn_hub_child_last_raw', wp_json_encode( [
+                'url'    => $url,
+                'method' => 'POST',
+                'err'    => $r->get_error_message(),
+                'code'   => null,
+                'final'  => null,
+                'body'   => null,
+                'ua'     => 'wp_remote_post',
+                'time'   => current_time( 'mysql' ),
+            ] ) );
             $err = $r->get_error_message();
             if ( self::is_cert_expired_error( $err ) ) {
                 $hint = $skip_ssl ? '' : ' You can temporarily enable "Skip SSL verification" below as a workaround until the Hub cert is renewed.';
@@ -252,7 +273,19 @@ class PBN_Hub_Child_Settings {
             return [ 'ok' => false, 'err' => $err, 'msg' => 'Handshake error: ' . $err ];
         }
         $code = wp_remote_retrieve_response_code( $r );
-        $body = json_decode( wp_remote_retrieve_body( $r ), true );
+        $raw_body = wp_remote_retrieve_body( $r );
+        $headers = wp_remote_retrieve_headers( $r );
+        // v1.0.16: snapshot the raw response for the settings page.
+        update_option( 'pbn_hub_child_last_raw', wp_json_encode( [
+            'url'     => $url,
+            'method'  => 'POST',
+            'code'    => $code,
+            'final'   => isset( $r['http_response'] ) && is_object( $r['http_response'] ) ? (string) $r['http_response']->get_response_object()->url : '',
+            'body'    => is_string( $raw_body ) ? substr( $raw_body, 0, 500 ) : '',
+            'headers' => is_object( $headers ) ? json_decode( wp_json_encode( $headers ), true ) : ( is_array( $headers ) ? $headers : [] ),
+            'time'    => current_time( 'mysql' ),
+        ] ) );
+        $body = json_decode( $raw_body, true );
         if ( $code !== 200 || empty( $body['ok'] ) ) {
             return [ 'ok' => false, 'err' => "HTTP {$code}", 'msg' => 'Handshake failed: ' . ( $body['message'] ?? "HTTP {$code}" ) ];
         }

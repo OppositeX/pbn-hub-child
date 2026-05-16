@@ -3,7 +3,7 @@
  * Plugin Name: PBN Hub Child
  * Plugin URI:  https://github.com/OppositeX/pbn-hub-child
  * Description: Lightweight REST endpoint for sites managed by PBN Hub. Receives content + media from the Hub, exposes whoami / categories / analytics. Authenticated by per-site bearer token.
- * Version:     1.0.15
+ * Version:     1.0.16
  * Author:      OppositeX
  * License:     GPL-2.0+
  * Text Domain: pbn-hub-child
@@ -27,7 +27,7 @@ if ( false ) {  // disabled — kept for diff continuity
     return;
 }
 
-define( 'PBN_HUB_CHILD_VERSION', '1.0.15' );
+define( 'PBN_HUB_CHILD_VERSION', '1.0.16' );
 define( 'PBN_HUB_CHILD_FILE',    __FILE__ );
 define( 'PBN_HUB_CHILD_PATH',    plugin_dir_path( __FILE__ ) );
 define( 'PBN_HUB_CHILD_URL',     plugin_dir_url( __FILE__ ) );
