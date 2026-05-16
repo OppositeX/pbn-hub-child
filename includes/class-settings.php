@@ -264,13 +264,37 @@ class PBN_Hub_Child_Settings {
             ] );
         };
 
+        // v1.0.19: track every attempt for the diagnostic surface.
+        $attempts = array();
+        $capture_attempt = function( $resp, $method, $url ) use ( &$attempts ) {
+            if ( is_wp_error( $resp ) ) {
+                $attempts[] = array(
+                    'method' => $method,
+                    'url'    => $url,
+                    'code'   => null,
+                    'err'    => $resp->get_error_message(),
+                    'body'   => null,
+                );
+            } else {
+                $attempts[] = array(
+                    'method' => $method,
+                    'url'    => $url,
+                    'code'   => wp_remote_retrieve_response_code( $resp ),
+                    'err'    => null,
+                    'body'   => substr( (string) wp_remote_retrieve_body( $resp ), 0, 250 ),
+                );
+            }
+        };
+
         $r   = $request( $primary );
         $url = $primary;
+        $capture_attempt( $r, 'POST', $primary );
         // Detect redirect or 405 → switch to rest_route= fallback.
         if ( ! is_wp_error( $r ) ) {
             $code = wp_remote_retrieve_response_code( $r );
             if ( in_array( (int) $code, [ 301, 302, 303, 307, 308, 405 ], true ) ) {
                 $r2 = $request( $fallback );
+                $capture_attempt( $r2, 'POST', $fallback );
                 if ( ! is_wp_error( $r2 ) ) {
                     $code2 = wp_remote_retrieve_response_code( $r2 );
                     if ( $code2 >= 200 && $code2 < 500 ) {
@@ -302,9 +326,10 @@ class PBN_Hub_Child_Settings {
                     'redirection' => 5, // GET is safe to follow redirects
                     'headers'     => array( 'Accept' => 'application/json' ),
                 ) );
+                $capture_attempt( $r3, 'GET', $get_url );
                 if ( ! is_wp_error( $r3 ) ) {
                     $code3 = wp_remote_retrieve_response_code( $r3 );
-                    if ( $code3 >= 200 && $code3 < 400 ) {
+                    if ( $code3 >= 200 && $code3 < 500 ) {
                         $r   = $r3;
                         $url = $get_url;
                     }
@@ -313,7 +338,8 @@ class PBN_Hub_Child_Settings {
         }
 
         if ( is_wp_error( $r ) ) {
-            update_option( 'pbn_hub_child_last_raw', wp_json_encode( [
+            update_option( 'pbn_hub_child_last_raw', wp_json_encode( array( 'attempts' => $attempts, 'time' => current_time( 'mysql' ) ) ) );
+            update_option( 'pbn_hub_child_last_raw_legacy', wp_json_encode( [
                 'url'    => $url,
                 'method' => 'POST',
                 'err'    => $r->get_error_message(),
@@ -333,8 +359,9 @@ class PBN_Hub_Child_Settings {
         $code = wp_remote_retrieve_response_code( $r );
         $raw_body = wp_remote_retrieve_body( $r );
         $headers = wp_remote_retrieve_headers( $r );
-        // v1.0.16: snapshot the raw response for the settings page.
-        update_option( 'pbn_hub_child_last_raw', wp_json_encode( [
+        // v1.0.19: persist the attempts array — much more useful diagnostic than a single response.
+        update_option( 'pbn_hub_child_last_raw', wp_json_encode( array( 'attempts' => $attempts, 'time' => current_time( 'mysql' ) ) ) );
+        update_option( 'pbn_hub_child_last_raw_legacy', wp_json_encode( [
             'url'     => $url,
             'method'  => 'POST',
             'code'    => $code,
