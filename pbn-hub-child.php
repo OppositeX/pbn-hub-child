@@ -3,7 +3,7 @@
  * Plugin Name: PBN Hub Child
  * Plugin URI:  https://github.com/OppositeX/pbn-hub-child
  * Description: Lightweight REST endpoint for sites managed by PBN Hub. Receives content + media from the Hub, exposes whoami / categories / analytics. Authenticated by per-site bearer token.
- * Version:     1.0.11
+ * Version:     1.0.13
  * Author:      OppositeX
  * License:     GPL-2.0+
  * Text Domain: pbn-hub-child
@@ -21,7 +21,7 @@ if ( false ) {  // disabled — kept for diff continuity
     return;
 }
 
-define( 'PBN_HUB_CHILD_VERSION', '1.0.11' );
+define( 'PBN_HUB_CHILD_VERSION', '1.0.13' );
 define( 'PBN_HUB_CHILD_FILE',    __FILE__ );
 define( 'PBN_HUB_CHILD_PATH',    plugin_dir_path( __FILE__ ) );
 define( 'PBN_HUB_CHILD_URL',     plugin_dir_url( __FILE__ ) );
@@ -70,3 +70,27 @@ add_filter( 'auto_update_plugin', function( $update, $item ) {
     }
     return $update;
 }, 10, 2 );
+
+/**
+ * v1.0.13 — Licenser SDK integration. Self-hosted license + update delivery
+ * via licenser.d3v.co.il. (v1.0.12 used wrong config keys — wp_die'd on load.)
+ */
+if ( file_exists( plugin_dir_path( __FILE__ ) . 'includes/licenser-sdk/SDK.php' ) ) {
+    require_once plugin_dir_path( __FILE__ ) . 'includes/licenser-sdk/SDK.php';
+    add_action( 'plugins_loaded', function () {
+        \Gloo\PbnHubChild\Licenser\SDK::init( array(
+            'product_slug' => 'pbn-hub-child',
+            'plugin_file'  => plugin_dir_path( __FILE__ ) . basename( __FILE__ ),
+            'plugin_slug'  => 'pbn-hub-child/' . basename( __FILE__ ),
+            'version'      => defined( 'PBN_HUB_CHILD_VERSION' ) ? PBN_HUB_CHILD_VERSION : '1.0.13',
+            'server_url'   => 'http://licenser.d3v.co.il',
+            'option_key'   => 'phc_license',
+            'js_global'    => 'PbnHubChildLicenser',
+            'css_class'    => 'phc-licenser',
+            'admin_label'  => 'PBN Hub Child — License',
+            'cache_hours'  => 12,
+            'grace_days'   => 7,
+            'feedback'     => true,
+        ) );
+    } );
+}
