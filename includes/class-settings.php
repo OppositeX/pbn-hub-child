@@ -280,6 +280,37 @@ class PBN_Hub_Child_Settings {
                 }
             }
         }
+        // v1.0.18: last-resort GET fallback. If the host's outbound forces HTTP→HTTPS
+        // and the Hub's HTTPS nginx returns 405 for POST on /wp-json/, we still get
+        // through with a GET. Hub v2.6.1+ accepts GET on /handshake with the same
+        // params as query string. Tried unconditionally if the previous two attempts
+        // ended in 301/302/303/307/308/405.
+        if ( ! is_wp_error( $r ) ) {
+            $latest_code = wp_remote_retrieve_response_code( $r );
+            if ( in_array( (int) $latest_code, [ 301, 302, 303, 307, 308, 405 ], true ) ) {
+                $domain = preg_replace( '#^https?://(www\.)?#', '', untrailingslashit( home_url() ) );
+                $get_url = add_query_arg( array(
+                    'token'                 => $token,
+                    'domain'                => $domain,
+                    'wp_version'            => $wp_version,
+                    'php_version'           => PHP_VERSION,
+                    'pbn_hub_child_version' => PBN_HUB_CHILD_VERSION,
+                ), $base . 'index.php?rest_route=/pbn-hub/v1/handshake' );
+                $r3 = wp_remote_get( $get_url, array(
+                    'timeout'     => 15,
+                    'sslverify'   => $sslverify,
+                    'redirection' => 5, // GET is safe to follow redirects
+                    'headers'     => array( 'Accept' => 'application/json' ),
+                ) );
+                if ( ! is_wp_error( $r3 ) ) {
+                    $code3 = wp_remote_retrieve_response_code( $r3 );
+                    if ( $code3 >= 200 && $code3 < 400 ) {
+                        $r   = $r3;
+                        $url = $get_url;
+                    }
+                }
+            }
+        }
 
         if ( is_wp_error( $r ) ) {
             update_option( 'pbn_hub_child_last_raw', wp_json_encode( [
