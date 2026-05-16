@@ -1,40 +1,22 @@
-name: Release
-
+name: Release on tag
 on:
   push:
-    tags:
-      - 'v*'
-
+    tags: ['v*']
 permissions:
   contents: write
-
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Build plugin zip
         run: |
-          mkdir -p build/pbn-hub-child
-          rsync -av \
-            --exclude '.git' \
-            --exclude '.github' \
-            --exclude 'tools' \
-            --exclude 'tests' \
-            --exclude '.gitignore' \
-            --exclude 'README.md' \
-            --exclude 'build' \
-            ./ build/pbn-hub-child/
-          cd build && zip -r pbn-hub-child.zip pbn-hub-child
-
-      - name: Publish release to PUBLIC pbn-hub-child-releases proxy
-        uses: softprops/action-gh-release@v2
+          mkdir -p /tmp/build
+          cp -r . /tmp/build/pbn-hub-child
+          cd /tmp/build
+          rm -rf pbn-hub-child/.git pbn-hub-child/.github
+          zip -r /tmp/pbn-hub-child.zip pbn-hub-child -x "*.DS_Store" "*node_modules*"
+      - uses: softprops/action-gh-release@v2
         with:
-          repository: OppositeX/pbn-hub-child-releases
-          token: ${{ secrets.RELEASES_PAT }}
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          files: build/pbn-hub-child.zip
-          draft: false
-          prerelease: false
+          files: /tmp/pbn-hub-child.zip
+          generate_release_notes: true
